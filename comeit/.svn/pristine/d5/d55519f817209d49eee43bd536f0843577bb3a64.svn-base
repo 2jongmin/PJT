@@ -1,0 +1,34 @@
+package comeit.framework.configure.spring;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.social.facebook.connect.FacebookConnectionFactory;
+import org.springframework.social.oauth2.OAuth2Parameters;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+import comeit.framework.common.utils.ApplicationProperty;
+
+@Configuration
+@EnableTransactionManagement
+public class SocialContextConfig {
+  @Autowired
+  @Qualifier("applicationProperty")
+  private ApplicationProperty applicationProperty;
+  
+  @Bean
+  public FacebookConnectionFactory facebookConnectionFactory() throws Exception {
+    FacebookConnectionFactory fcb = new FacebookConnectionFactory(applicationProperty.getProperty("api.facebook.appId")
+        , applicationProperty.getProperty("api.facebook.secret"));
+    return fcb;
+  }
+  
+  @Bean
+  public OAuth2Parameters oauth2Parameter() {
+    OAuth2Parameters oauth2Parameter = new OAuth2Parameters();
+    oauth2Parameter.setScope(applicationProperty.getProperty("api.facebook.scope"));
+    oauth2Parameter.setRedirectUri("http://192.168.1.169:8181/test/facebookSignInCallback");
+    return oauth2Parameter;
+  }
+}

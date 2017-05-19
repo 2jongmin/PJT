@@ -1,0 +1,197 @@
+package comeit.comeit.member.controller;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
+
+import comeit.comeit.member.service.MemberService;
+import comeit.comeit.member.service.SocialLoginService;
+import comeit.comeit.member.vo.MemberVO;
+import comeit.comeit.member.vo.OpenApiUserVO;
+import comeit.framework.common.enums.ApplicationCodeEnum;
+import comeit.framework.common.exception.BadRequestException;
+import comeit.framework.security.crypto.ComeitCrypto;
+
+/**
+ * RESTFul 회원 컨트롤러
+ * @author linuxp
+ *
+ */
+@RestController
+public class RestMemberController {
+  protected final Logger log = LoggerFactory.getLogger(RestMemberController.class);
+  
+  @Autowired
+  private MemberService memberService;
+  
+  @Autowired
+  private SocialLoginService apiService;
+  
+  @Autowired
+  private ComeitCrypto crypto;
+  
+  /**
+   * 회원가입
+   * @param payload
+   * @return
+   * @throws Exception
+   */
+  @RequestMapping(value="/rest/members", method=RequestMethod.POST)
+  public ResponseEntity<Map<String, Object>> insert(@RequestBody MemberVO inMemberVo) throws Exception {
+    log.debug(inMemberVo.toString());
+    
+    // 복호화
+    crypto.getAES256DecryptVo(inMemberVo);
+    
+    log.debug(inMemberVo.toString());
+    
+    // 가입처리
+    MemberVO resultMemberVo = memberService.insert(inMemberVo);
+    
+    // 결과 암호화
+    crypto.getAES256EncryptVo(resultMemberVo);
+    
+    Map<String, Object> resultMap = new HashMap<String, Object>();
+    resultMap.put("result", resultMemberVo);
+    
+    ResponseEntity<Map<String, Object>> resultEntity = new ResponseEntity<Map<String, Object>>(resultMap, HttpStatus.CREATED);
+    
+    return resultEntity;
+  }
+  
+  /**
+   * 회원정보 조회
+   * @return
+   * @throws Exception
+   */
+  @RequestMapping(value="/rest/members/{userSeq}", method=RequestMethod.GET)
+  public ResponseEntity<MemberVO> selectMemberByUserSeq(@PathVariable String userSeq) throws Exception {
+    if(StringUtils.isEmpty(userSeq) && StringUtils.isNumeric(userSeq)) {
+      throw new BadRequestException();
+    }
+    
+    MemberVO inMemberVo = new MemberVO();
+    inMemberVo.setUserSeq(userSeq);
+    
+    MemberVO resultMemberVo = memberService.select(inMemberVo);
+    
+    HttpStatus statusCode = null;
+    
+    if(resultMemberVo != null) {
+      statusCode = HttpStatus.OK;
+    } else {
+      statusCode = HttpStatus.NOT_FOUND;
+    }
+    
+    ResponseEntity<MemberVO> resultEntity = new ResponseEntity<MemberVO>(resultMemberVo, statusCode);
+    
+    return resultEntity;
+  }
+  
+  /**
+   * email로 등록회원 수 조회(중복체크시 사용)
+   * @param request
+   * @return
+   * @throws Exception
+   */
+  @RequestMapping(value="/rest/members/{email}/count", method=RequestMethod.GET)
+  public ResponseEntity<Map<String, Integer>> selectMemberCountByEmail(@PathVariable("email") String email) throws Exception {
+    if(StringUtils.isEmpty(email)) {
+      throw new BadRequestException();
+    }
+    
+    int count = memberService.selectCountByEmail(email);
+    
+    Map<String, Integer> resultMap = new HashMap<String, Integer>();
+    resultMap.put("result", count);
+    
+    ResponseEntity<Map<String, Integer>> resultEntity = new ResponseEntity<Map<String, Integer>>(resultMap, HttpStatus.OK);
+    
+    return resultEntity;
+  }
+
+  /**
+   * 소셜 로그인 액세스 토큰 유효성 검사
+   * @param request
+   * @return
+   * @throws Exception
+   */
+  @RequestMapping(value="/rest/social/verify/accessToken", method=RequestMethod.GET, produces="application/json; charset=utf8")
+  public ResponseEntity<String> verifySocialLoginAccessToken(HttpServletRequest request) throws Exception {
+    // 소셜 로그인 타입(페이스북, 카카오, 구글, 네이버)
+    String socialTypeCodeStr = request.getHeader("SocialType");
+    String accessToken = request.getHeader("AccessToken");
+    
+    if(StringUtils.isEmpty(socialTypeCodeStr) || StringUtils.isEmpty(accessToken)) {
+      throw new BadRequestException();
+    }
+
+    ApplicationCodeEnum socialTypeCode = ApplicationCodeEnum.getEnum(socialTypeCodeStr);
+    
+    String userId = null;
+    
+    if(socialTypeCode == ApplicationCodeEnum.API_FACEBOOK_CODE || socialTypeCode == ApplicationCodeEnum.API_GOOGLE_CODE) {
+      // 페이스북의 경우 페이스북의 userId도 필요하다.
+      userId = request.getHeader("UserId");
+      
+      if(StringUtils.isEmpty(userId)) {
+        throw new BadRequestException();
+      }
+    }
+    
+    OpenApiUserVO result = apiService.verifySocialLoginAccessToken(socialTypeCode, accessToken, userId);
+    
+    ResponseEntity<String> resultEntity = null;
+    if(result.getStatusCode() == HttpStatus.OK) {
+      resultEntity = new ResponseEntity<String>(result.getApiUuid(), HttpStatus.OK);
+    } else {
+      if(StringUtils.isNotEmpty(result.getMessage())) {
+        resultEntity = new ResponseEntity<String>(result.getMessage(), result.getStatusCode());
+      } else {
+        resultEntity = new ResponseEntity<String>(result.getStatusCode());
+      }
+    }
+
+    return resultEntity;
+  }
+  
+  /**
+   * 카카오 액세스 토큰 유효성 검사
+   * @param accessToken
+   * @return
+   * @throws Exception
+   */
+  @RequestMapping(value="/rest/member/verify/accessToken/kakao")
+  @Deprecated
+  public ResponseEntity<String> verifyKakaoAccessToken(HttpServletRequest request) throws Exception {
+    String accessToken = request.getHeader("accessToken");
+
+    if(StringUtils.isEmpty(accessToken)) {
+      throw new BadRequestException();
+    }
+
+    OpenApiUserVO result = apiService.verifyKakaoAccessToken(accessToken);
+
+    ResponseEntity<String> resultEntity = null;
+    if(result.getStatusCode() == HttpStatus.OK) {
+      resultEntity = new ResponseEntity<String>(result.getApiUuid(), HttpStatus.OK);
+    } else {
+      resultEntity = new ResponseEntity<String>(result.getMessage(), result.getStatusCode());
+    }
+
+    return resultEntity;
+  }
+}

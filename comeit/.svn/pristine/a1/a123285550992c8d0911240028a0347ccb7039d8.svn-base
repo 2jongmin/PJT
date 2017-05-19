@@ -1,0 +1,46 @@
+package comeit.test.service;
+
+import javax.annotation.Resource;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import comeit.framework.common.exception.BizExceptionProperties;
+import comeit.test.dao.TestDAO;
+import comeit.test.dto.TestDTO;
+
+@Service
+//@Transactional(readOnly=true)
+public class TestService {
+  protected final Logger log = LoggerFactory.getLogger(this.getClass());
+  
+  @Resource(name="testDAO")
+  private TestDAO testDAO;
+  
+  //@Transactional(readOnly=false, propagation=Propagation.REQUIRED, rollbackFor=Throwable.class)
+  public int insert() throws Exception {
+    TestDTO inDto = new TestDTO();
+    inDto.setTest1("2");
+    inDto.setTest2("2222222222");
+    inDto.setTest3("3333333333");
+    
+    testDAO.insert(inDto);
+    
+    inDto = new TestDTO();
+    inDto.setTest1("1");
+    inDto.setTest2("222222222");
+    inDto.setTest3("333333333");
+    
+    return testDAO.insert(inDto);
+  }
+  
+  public String select(String arg) throws Exception {
+    if(arg == null) {
+      throw new BizExceptionProperties();
+    }
+    
+    return "aaaaaa";
+  }
+}

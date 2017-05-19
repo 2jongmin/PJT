@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE properties SYSTEM "http://java.sun.com/dtd/properties.dtd">
+<properties>
+  <!-- <entry key="jdbc.driverClassName">net.sf.log4jdbc.DriverSpy</entry> -->
+  <!-- <entry key="jdbc.driverClassName">org.mariadb.jdbc.Driver</entry>-->
+  <!-- <entry key="jdbc.url">jdbc:mysql://sheon.iptime.org:8090/COMEIT?useUnicode=true&amp;characterEncoding=UTF-8</entry> -->
+  <entry key="jdbc.driverClassName">com.mysql.jdbc.Driver</entry>
+  <entry key="jdbc.url">jdbc:mysql://xxx.co.kr/DEV?zeroDateTimeBehavior=convertToNull</entry>
+  <entry key="jdbc.username">DEV</entry>
+  <entry key="jdbc.password">asdf1234</entry>
+  <entry key="jdbc.maxIdle">20</entry>
+  <entry key="jdbc.maxWaitMills">10000</entry>
+  <entry key="jdbc.validationQuery">SELECT 1</entry>
+</properties>

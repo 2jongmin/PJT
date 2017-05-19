@@ -1,0 +1,139 @@
+package comeit.comeit.member.service;
+
+import org.apache.commons.lang.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+
+import comeit.comeit.member.dao.MemberDAO;
+import comeit.comeit.member.vo.MemberVO;
+import comeit.comeit.member.vo.OpenApiUserVO;
+import comeit.framework.common.enums.ApplicationCodeEnum;
+import comeit.framework.common.exception.BizExceptionProperties;
+import comeit.framework.security.crypto.ComeitCrypto;
+
+@Service
+public class MemberService {
+  @Autowired
+  private MemberDAO memberDAO;
+  
+  @Autowired
+  private OpenAPIService apiService;
+  
+  @Autowired
+  private ComeitCrypto crypto;
+  
+  /**
+   * 회원가입 처리
+   * 완료후 가입된 회원정보 반환
+   * @param inMemberVo
+   * @return
+   * @throws Exception
+   */
+  public MemberVO insert(MemberVO inMemberVo) throws Exception {
+    // 존재하는 회원인지 조회
+    int count = selectCountByEmail(inMemberVo.getEmail());
+    
+    if(count > 0) {
+      throw new BizExceptionProperties("err.member.msg001");
+    }
+    
+    MemberVO resultMemberVo = null;
+    
+    // 존재하는 회원이 없으면 가입처리
+    String nextSeq = memberDAO.selectNextSeq();
+    
+    if(StringUtils.isNotEmpty(nextSeq) && !"0".equals(nextSeq)) {
+      inMemberVo.setUserSeq(nextSeq);
+      
+      if(StringUtils.isNotEmpty(inMemberVo.getLoginType())) {
+        // 로그인타입이 있으면 가입시 해당 로그인 타입을 플랫폼코드에 세팅
+        inMemberVo.setJoinClassifyCode(inMemberVo.getLoginType());
+      }
+      
+      // 비밀번호 암호화
+      String encPassword = crypto.getSHA256Encrypt(inMemberVo.getPassword());
+      inMemberVo.setPassword(encPassword);
+      
+      if(memberDAO.insert(inMemberVo) > 0) {
+        resultMemberVo = memberDAO.select(inMemberVo);
+      }
+    } else {
+      // 오류
+      
+    }
+    
+    return resultMemberVo;
+  }
+  
+  /**
+   * 회원정보 조회, 이메일 주소가 있으면 이메일 주소, 없으면 USER_SEQ로 조회한다.
+   * 둘다 없으면 null
+   * @param inMemberVo
+   * @return
+   * @throws Exception
+   */
+  public MemberVO select(MemberVO inMemberVo) throws Exception {
+    return memberDAO.select(inMemberVo);
+  }
+  
+  /**
+   * email로 등록회원 수 조회(중복체크시 사용)
+   * @param email
+   * @return
+   * @throws Exception
+   */
+  public int selectCountByEmail(String email) throws Exception {
+    int result = memberDAO.selectCountByEmail(email);
+    
+    return result;
+  }
+  
+  /**
+   * 공통 로그인 처리
+   * 페이스북, 카카오, 네이버 API를 이용한 로그인인 경우 해당 회원의 고유번호가 없으면
+   * 가입처리까지 여기서 한다.
+   * @param inMemberVo
+   * @return
+   * @throws Exception
+   */
+  public MemberVO loginForApi(MemberVO inMemberVo) throws Exception {
+    OpenApiUserVO resultApiUserVo = null;
+    
+    // 각 서비스로 ACCESS_TOKEN 유효성 검증 요청
+    if(ApplicationCodeEnum.API_FACEBOOK_CODE.getCode().equals(inMemberVo.getLoginType())) {
+      // 페이스북
+    } else if(ApplicationCodeEnum.API_KAKAO_CODE.getCode().equals(inMemberVo.getLoginType())) {
+      // 카카오
+      resultApiUserVo = apiService.verifyKakaoAccessToken(inMemberVo.getAccessToken());
+    } else if(ApplicationCodeEnum.API_NAVER_CODE.getCode().equals(inMemberVo.getLoginType())) {
+      // 네이버
+    }
+    
+    MemberVO resultMemberVo = null;
+    
+    if(resultApiUserVo.getStatusCode() == HttpStatus.OK) {
+      // 검증 성공한 경우 회원정보 조회 또는 가입처리
+      resultMemberVo = memberDAO.select(inMemberVo);
+      
+      if(resultMemberVo == null) {
+        // 존재하는 회원이 없으면 가입처리
+        String nextSeq = memberDAO.selectNextSeq();
+        
+        if(StringUtils.isNotEmpty(nextSeq) && !"0".equals(nextSeq)) {
+          inMemberVo.setUserSeq(nextSeq);
+          inMemberVo.setJoinClassifyCode(inMemberVo.getLoginType());
+          
+          if(memberDAO.insert(inMemberVo) > 0) {
+            resultMemberVo = memberDAO.select(inMemberVo);
+          }
+        } else {
+          // 오류
+          
+        }
+      }
+    }
+    
+    return resultMemberVo;
+  }
+}

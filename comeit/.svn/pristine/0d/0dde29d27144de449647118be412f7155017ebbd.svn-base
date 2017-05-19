@@ -1,0 +1,25 @@
+package comeit.test.controller;
+
+import comeit.framework.security.crypto.ComeitCrypto;
+
+public class ConsoleTest {
+
+  public static void main(String[] args) {
+    try {
+      ComeitCrypto crypto = new ComeitCrypto();
+
+      String plainText = "asdf";
+
+//      System.out.println("sha256 plain text : " +  plainText);
+//      System.out.println("sha256 enc text : " +  crypto.getSHA256Encrypt(plainText));
+//      System.out.println("sha256 password compare : " + crypto.comparePassword(plainText, "f0e4c2f76c58916ec258f246851bea091d14d4247a2fc3e18694461b1816e13b"));
+
+      String decText = crypto.getAES256Encrypt(plainText);
+      System.out.println("aes256 plain text : " + plainText);
+      System.out.println("aes256 enc text : " + decText);
+      System.out.println("aes256 dec text : " + crypto.getAES256Decrypt(decText));
+    } catch(Exception ex) {
+      ex.printStackTrace();
+    }
+  }
+}

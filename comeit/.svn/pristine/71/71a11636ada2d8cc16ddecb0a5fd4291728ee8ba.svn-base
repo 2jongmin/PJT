@@ -1,0 +1,154 @@
+package comeit.comeit.member.controller;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
+
+import comeit.comeit.member.service.MemberService;
+import comeit.comeit.member.service.OpenAPIService;
+import comeit.comeit.member.vo.MemberVO;
+import comeit.comeit.member.vo.OpenApiUserVO;
+import comeit.framework.common.exception.BadRequestException;
+import comeit.framework.security.crypto.ComeitCrypto;
+
+/**
+ * RESTFul 회원 컨트롤러
+ * @author linuxp
+ *
+ */
+@RestController
+public class RestMemberController {
+  protected final Logger log = LoggerFactory.getLogger(RestMemberController.class);
+  
+  @Autowired
+  private MemberService memberService;
+  
+  @Autowired
+  private OpenAPIService apiService;
+  
+  @Autowired
+  private ComeitCrypto crypto;
+  
+  /**
+   * 회원가입
+   * @param payload
+   * @return
+   * @throws Exception
+   */
+  @RequestMapping(value="/rest/members", method=RequestMethod.POST)
+  public ResponseEntity<Map<String, Object>> insert(@RequestBody MemberVO inMemberVo) throws Exception {
+    log.debug(inMemberVo.toString());
+    
+    // 복호화
+    crypto.getAES256DecryptVo(inMemberVo);
+    
+    log.debug(inMemberVo.toString());
+    
+    // 가입처리
+    MemberVO resultMemberVo = memberService.insert(inMemberVo);
+    
+    // 결과 암호화
+    crypto.getAES256EncryptVo(resultMemberVo);
+    
+    Map<String, Object> resultMap = new HashMap<String, Object>();
+    resultMap.put("result", resultMemberVo);
+    
+    ResponseEntity<Map<String, Object>> resultEntity = new ResponseEntity<Map<String, Object>>(resultMap, HttpStatus.CREATED);
+    
+    return resultEntity;
+  }
+  
+  /**
+   * 회원정보 조회
+   * @return
+   * @throws Exception
+   */
+  @RequestMapping(value="/rest/members/{userSeq}", method=RequestMethod.GET)
+  public ResponseEntity<MemberVO> selectMemberByUserSeq(@PathVariable String userSeq) throws Exception {
+    if(StringUtils.isEmpty(userSeq) && StringUtils.isNumeric(userSeq)) {
+      throw new BadRequestException();
+    }
+    
+    MemberVO inMemberVo = new MemberVO();
+    inMemberVo.setUserSeq(userSeq);
+    
+    MemberVO resultMemberVo = memberService.select(inMemberVo);
+    
+    HttpStatus statusCode = null;
+    
+    if(resultMemberVo != null) {
+      statusCode = HttpStatus.OK;
+    } else {
+      statusCode = HttpStatus.NOT_FOUND;
+    }
+    
+    ResponseEntity<MemberVO> resultEntity = new ResponseEntity<MemberVO>(resultMemberVo, statusCode);
+    
+    return resultEntity;
+  }
+  
+  /**
+   * email로 등록회원 수 조회(중복체크시 사용)
+   * @param request
+   * @return
+   * @throws Exception
+   */
+  @RequestMapping(value="/rest/members/{email}/count", method=RequestMethod.GET)
+  public ResponseEntity<Map<String, Integer>> selectMemberCountByEmail(@PathVariable("email") String email) throws Exception {
+    if(StringUtils.isEmpty(email)) {
+      throw new BadRequestException();
+    }
+    
+    int count = memberService.selectCountByEmail(email);
+    
+    Map<String, Integer> resultMap = new HashMap<String, Integer>();
+    resultMap.put("result", count);
+    
+    ResponseEntity<Map<String, Integer>> resultEntity = new ResponseEntity<Map<String, Integer>>(resultMap, HttpStatus.OK);
+    
+    return resultEntity;
+  }
+
+  public ResponseEntity<String> verifySocialLoginAccessToken(HttpServletRequest request) throws Exception {
+    return null;
+  }
+  
+  /**
+   * 카카오 액세스 토큰 유효성 검사
+   * @param accessToken
+   * @return
+   * @throws Exception
+   */
+  @RequestMapping(value="/rest/member/verify/accessToken/kakao")
+  public ResponseEntity<String> verifyKakaoAccessToken(HttpServletRequest request) throws Exception {
+    String accessToken = request.getHeader("accessToken");
+
+    if(StringUtils.isEmpty(accessToken)) {
+      throw new BadRequestException();
+    }
+
+    OpenApiUserVO result = apiService.verifyKakaoAccessToken(accessToken);
+
+    ResponseEntity<String> resultEntity = null;
+    if(result.getStatusCode() == HttpStatus.OK) {
+      resultEntity = new ResponseEntity<String>(result.getApiUuid(), HttpStatus.OK);
+    } else {
+      resultEntity = new ResponseEntity<String>(result.getMessage(), result.getStatusCode());
+    }
+
+    return resultEntity;
+  }
+}

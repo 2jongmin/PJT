@@ -1,0 +1,146 @@
+package comeit.framework.configure.spring;
+
+import javax.sql.DataSource;
+
+import org.apache.commons.dbcp2.BasicDataSource;
+import org.mybatis.spring.annotation.MapperScan;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.config.PropertyPlaceholderConfigurer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
+import org.springframework.jdbc.datasource.lookup.JndiDataSourceLookup;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+import comeit.framework.common.abstracts.dao.RefreshableSqlSessionFactoryBean;
+import comeit.framework.mybatis.Mapper;
+import net.sf.log4jdbc.Log4jdbcProxyDataSource;
+import net.sf.log4jdbc.tools.Log4JdbcCustomFormatter;
+import net.sf.log4jdbc.tools.LoggingType;
+
+@Configuration
+@EnableTransactionManagement
+@MapperScan(basePackages = "comeit", annotationClass = Mapper.class)
+public class DatasourceContextConfig {
+  protected final Logger log = LoggerFactory.getLogger(this.getClass());
+  
+  @Value("${jdbc.driverClassName}")
+  private String driverClassName;
+  
+  @Value("${jdbc.url}")
+  private String url;
+  
+  @Value("${jdbc.username}")
+  private String userName;
+  
+  @Value("${jdbc.password}")
+  private String password;
+  
+  @Value("${jdbc.maxIdle}")
+  private int maxIdle;
+  
+  @Value("${jdbc.maxWaitMills}")
+  private int maxWaitMills;
+  
+  @Value("${jdbc.validationQuery}")
+  private String validationQuery;
+  
+  private static final String DATASOURCE_XML_FILE = "classpath:/conf/properties/datasource.xml";
+  private static final String MYBATIS_CONFIG_FILE_PATH = "classpath:/conf/mapper/mybatis-config.xml";
+  private static final String MYBATIS_MAPPER_FILE_PATH = "classpath:/conf/sqlmap/**/*DAO.xml";
+  
+  /*@Bean
+  public SqlSession sqlSession() throws Exception {
+    SqlSession sqlSession = new SqlSessionTemplate(this.sqlSessionFactory().getObject());
+    return sqlSession;
+  }*/
+  
+  @Bean
+  public RefreshableSqlSessionFactoryBean sqlSessionFactory() throws Exception {
+    RefreshableSqlSessionFactoryBean sqlSessionFactoryBean = new RefreshableSqlSessionFactoryBean();
+    
+    sqlSessionFactoryBean.setDataSource(dataSourceLog());
+    //sqlSessionFactoryBean.setDataSource(dataSource());
+    //sqlSessionFactoryBean.setDataSource(dataSourceJndi());
+    sqlSessionFactoryBean.setConfigLocation(new PathMatchingResourcePatternResolver().getResource(MYBATIS_CONFIG_FILE_PATH));
+    sqlSessionFactoryBean.setMapperLocations(new PathMatchingResourcePatternResolver().getResources(MYBATIS_MAPPER_FILE_PATH));
+    
+    return sqlSessionFactoryBean;
+  }
+  
+  /**
+   * 프로퍼티 홀더는 다른 빈들이 사용하는 프로퍼티들을 로딩하기 때문에, static 메소드로 실행된다.
+   * 다른 일반 빈들이 만들어지기전에 먼저 만들어져야 한다.
+   * @return
+   */
+  @Bean
+  public static PropertyPlaceholderConfigurer propertyPlaceholderConfigurer() throws Exception {
+    PropertyPlaceholderConfigurer ppc = new PropertyPlaceholderConfigurer();
+    //ppc.setLocations(new Resource[] { new ClassPathResource(DATASOURCE_XML_FILE) });
+    ppc.setLocations(new PathMatchingResourcePatternResolver().getResources(DATASOURCE_XML_FILE));
+    return ppc;
+  }
+  
+  /**
+   * DataSource를 참조하여 로그용 DataSource를 설정
+   * DependsOn 어노테이션은 dataSourceLog 빈이 생성되기 전에 dataSource빈 먼저 생성하라는 의미
+   * 
+   * @return
+   */
+  @Bean(name="dataSourceLog")
+  @DependsOn(value={"dataSource"})
+  public Log4jdbcProxyDataSource dataSourceLog() {
+    //log.debug("dataSourceLog");
+    Log4jdbcProxyDataSource dataSource = new Log4jdbcProxyDataSource(dataSource());
+    Log4JdbcCustomFormatter logFormatter = new Log4JdbcCustomFormatter();
+    logFormatter.setLoggingType(LoggingType.MULTI_LINE);
+    //logFormatter.setMargin(19);
+    logFormatter.setSqlPrefix("\n========== QUERY ==========\n");
+    dataSource.setLogFormatter(logFormatter);
+    
+    return dataSource;
+  }
+  
+  /**
+   * DataSource 설정
+   * @return
+   */
+  @Bean(destroyMethod="close")
+  public DataSource dataSource() {
+    //log.debug("dataSource");
+    BasicDataSource dataSource = new BasicDataSource();
+    dataSource.setDriverClassName(this.driverClassName);
+    dataSource.setUrl(this.url);
+    dataSource.setUsername(this.userName);
+    dataSource.setPassword(this.password);
+    dataSource.setMaxIdle(this.maxIdle);
+    dataSource.setMaxWaitMillis(this.maxWaitMills);
+    dataSource.setValidationQuery(this.validationQuery);
+
+    return dataSource;
+  }
+  
+  public DataSource dataSourceJndi() {
+    final JndiDataSourceLookup dsLookup = new JndiDataSourceLookup();
+    dsLookup.setResourceRef(true);
+    DataSource dataSource = dsLookup.getDataSource("java:comp/env/jdbc/comeitDS");
+    return dataSource;
+  }
+  
+  /**
+   * MyBatis 를 사용하지 않고, 쌩 jdbcTemplate 를 이용해서 데이터베이스를 조회하는 DAO 를 만들기 위한 Bean.
+   * 실전에서는 사용할 일이 거의 없다. 예제를 위해서 넣은 코드.
+   * @return
+   */
+  /*
+  @Bean
+  public JdbcTemplate jdbcTemplate() {
+    JdbcTemplate jdbcTemplate = new JdbcTemplate();
+    jdbcTemplate.setDataSource(this.dataSource());
+    return jdbcTemplate;
+  }
+  */
+}

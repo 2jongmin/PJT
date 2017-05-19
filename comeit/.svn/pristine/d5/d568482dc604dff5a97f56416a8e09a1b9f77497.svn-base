@@ -1,0 +1,96 @@
+package comeit.framework.configure.spring;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
+import org.springframework.context.support.MessageSourceAccessor;
+import org.springframework.context.support.ReloadableResourceBundleMessageSource;
+import org.springframework.core.io.Resource;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+import comeit.framework.common.utils.ApplicationProperty;
+import comeit.framework.common.utils.ComeitMessage;
+import comeit.framework.security.crypto.ComeitCrypto;
+
+@Configuration
+@EnableAspectJAutoProxy(proxyTargetClass=true)
+//@EnableScheduling
+@EnableTransactionManagement
+@ComponentScan (
+    basePackages = "comeit",
+    excludeFilters = {
+        @ComponentScan.Filter(org.springframework.stereotype.Controller.class),
+        @ComponentScan.Filter(org.springframework.web.bind.annotation.ControllerAdvice.class)
+    })
+public class ApplicationContextConfig {
+  protected final Logger log = LoggerFactory.getLogger(ApplicationContextConfig.class);
+  
+  @Value("classpath:/conf/properties/application.properties")
+  private Resource resource;
+  
+//  @Bean
+//  @Profile("local")
+//  public String local() {
+//    log.info("로컬!!!!!!!!!!!!!!!!");
+//    return "local";
+//  }
+//  
+//  @Bean
+//  @Profile("dev")
+//  public String dev() {
+//    log.info("개발!!!!!!!!!!!!!!!!");
+//    return "dev";
+//  }
+  
+//  @Bean(name="exceptionAspect")
+//  public ExceptionAspect exceptionAspect() {
+//    return new ExceptionAspect();
+//  }
+  
+  /**
+   * 어플리케이션의 환경설정보를 조회할 수 있는 프로퍼티 유틸
+   * @return
+   * @throws Exception
+   */
+  @Bean(name="applicationProperty")
+  public ApplicationProperty applicationProperty() throws Exception {
+    return new ApplicationProperty(this.resource);
+  }
+  
+  @Bean(name="messageSource")
+  public ReloadableResourceBundleMessageSource messageSource() throws Exception {
+    ReloadableResourceBundleMessageSource rrbm = new ReloadableResourceBundleMessageSource();
+    rrbm.setBasenames("classpath:/conf/message/message");
+    rrbm.setCacheSeconds(60);
+    
+    return rrbm;
+  }
+  
+  @Bean(name="messageSourceAccessor")
+  public MessageSourceAccessor messageSourceAccessor() throws Exception {
+    return new MessageSourceAccessor(messageSource());
+  }
+  
+  /**
+   * 메시지 소스
+   * @return
+   * @throws Exception
+   */
+  @Bean(name="comeitMessage")
+  public ComeitMessage comeitMessage() throws Exception {
+    return new ComeitMessage();
+  }
+  
+  /**
+   * Come it 암호화 모듈
+   * @return
+   */
+  @Bean(name="comeitCrypto")
+  public ComeitCrypto comeitCrypto() {
+    return new ComeitCrypto();
+  }
+}

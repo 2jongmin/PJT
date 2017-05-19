@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="comeit.comeit.member.dao.MemberDAO">
+  <resultMap type="comeit.comeit.member.vo.MemberVO" id="member">
+    <result property="userSeq" column="USER_SEQ" javaType="string"/>
+    <result property="joinClassifyCode" column="JOIN_CLASSIFY_CODE" javaType="string"/>
+    <result property="email" column="EMAIL" javaType="string" />
+    <result property="apiUuid" column="API_UUID" javaType="string" />
+    <result property="accessToken" column="ACCESS_TOKEN" javaType="string" />
+    <result property="password" column="PASSWORD" javaType="string" />
+    <result property="nickName" column="NICK_NAME" javaType="string" />
+    <result property="localeCode" column="LOCALE_CODE" javaType="string" />
+    <result property="intro" column="INTRO" javaType="string" />
+    <result property="joinDtime" column="JOIN_DTIME" javaType="string" />
+    <result property="lastLoginDtime" column="LAST_LOGIN_DTIME" javaType="string" />
+  </resultMap>
+  
+  <!-- 회원정보 저장 -->
+  <insert id="insert" parameterType="memberVo">
+    INSERT INTO MEMBER (
+           USER_SEQ
+         , JOIN_CLASSIFY_CODE
+         , EMAIL
+         , API_UUID
+         , ACCESS_TOKEN
+         , PASSWORD
+         , NICK_NAME
+         , LOCALE_CODE
+         , INTRO
+         , JOIN_DTIME
+         , LAST_LOGIN_DTIME
+    ) VALUES (
+           #{userSeq}
+         , #{joinClassifyCode}
+         , #{email}
+         , #{apiUuid}
+         , #{accessToken}
+         , #{password}
+         , #{nickName}
+         , #{localeCode}
+         , #{intro}
+         , NOW()
+         , NOW()
+    )
+  </insert>
+  
+  <!-- USER_SEQ 채번 -->
+  <select id="selectNextSeq" resultType="String">
+    SELECT IFNULL(MAX(USER_SEQ), 0) + 1 AS userSeq
+      FROM MEMBER
+  </select>
+  
+  <!-- 회원정보 조회 -->
+  <select id="select" parameterType="memberVo" resultMap="member">
+    SELECT USER_SEQ
+         , JOIN_CLASSIFY_CODE
+         , EMAIL
+         , API_UUID
+         , ACCESS_TOKEN
+         , PASSWORD
+         , NICK_NAME
+         , LOCALE_CODE
+         , INTRO
+         , JOIN_DTIME
+         , LAST_LOGIN_DTIME
+      FROM MEMBER
+    <choose>
+      <when test="userSeq != null and userSeq != ''">
+     WHERE USER_SEQ = #{userSeq}
+      </when>
+      <when test="email != null and email != ''">
+     WHERE EMAIL = #{email}
+      </when>
+      <when test="(apiUuid != null and apiUuid != '') and (loginType != null and loginType != '')">
+     WHERE API_UUID = #{apiUuid}
+       AND JOIN_CLASSIFY_CODE = #{loginType}
+      </when>
+    </choose>
+  </select>
+  
+  <!-- email로 가입된 회원 수 조회 -->
+  <select id="selectCountByEmail" parameterType="String" resultType="Integer">
+    SELECT COUNT(*)
+      FROM MEMBER
+     WHERE EMAIL = #{email}
+  </select>
+</mapper>

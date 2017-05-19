@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:p="http://www.springframework.org/schema/p"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:aop="http://www.springframework.org/schema/aop" 
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:context="http://www.springframework.org/schema/context" 
+       xmlns:util="http://www.springframework.org/schema/util"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+                           http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd   
+                           http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+                           http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd">
+                           
+  <!-- Java Config로 하고 싶었으나.. 이부분은 시간이 오래 걸릴거 같아 XML로 간다. -->
+  <tx:advice id="txAdvice" transaction-manager="txManager">
+    <tx:attributes>
+      <tx:method name="insert*" propagation="REQUIRED" rollback-for="Throwable" />
+      <tx:method name="update*" propagation="REQUIRED" rollback-for="Throwable" />
+      <tx:method name="delete*" propagation="REQUIRED" rollback-for="Throwable" />
+      <tx:method name="select*" propagation="REQUIRED" rollback-for="Throwable" />
+      <tx:method name="set*" propagation="REQUIRED" rollback-for="Throwable" />
+      <tx:method name="login*" propagation="REQUIRED" rollback-for="Throwable" />
+    </tx:attributes>
+  </tx:advice>
+  
+  <aop:config proxy-target-class="true">
+    <aop:pointcut id="serviceMethod" expression="execution(* *..*Service.*(..))" />
+    <aop:advisor id="txAdvisor" advice-ref="txAdvice" pointcut-ref="serviceMethod" />
+  </aop:config>
+</beans>

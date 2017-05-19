@@ -1,0 +1,202 @@
+package comeit.framework.configure.spring.security.provider;
+
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpSession;
+
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.stereotype.Component;
+
+import comeit.comeit.member.service.MemberService;
+import comeit.comeit.member.vo.MemberVO;
+import comeit.framework.common.enums.ApplicationCodeEnum;
+import comeit.framework.common.enums.ResultCodeEnum;
+import comeit.framework.common.exception.ComeitBadCredentialsException;
+import comeit.framework.configure.spring.security.AuthorityInfoVO;
+import comeit.framework.security.crypto.ComeitCrypto;
+import comeit.framework.spring.web.HttpServletRequestProvider;
+
+@Component
+public class ComeitAuthenticationProvider implements AuthenticationProvider {
+  protected final Logger log = LoggerFactory.getLogger(ComeitAuthenticationProvider.class);
+  
+  @Autowired
+  private MemberService memberService;
+  
+  @Autowired
+  private ComeitCrypto crypto;
+  
+  @Override
+  public Authentication authenticate(Authentication authentication) throws ComeitBadCredentialsException, AuthenticationException {
+    HttpServletRequest request = HttpServletRequestProvider.getHttpServletRequest();
+    
+    /**
+     * loginType
+     * 00004 : 일반 회원(사용자)
+     */
+    String loginType = (String)request.getParameter("login_type");
+    ApplicationCodeEnum loginTypeCode = ApplicationCodeEnum.valueOf(loginType);
+    
+    try {
+      switch(loginTypeCode) {
+      case API_COMEIT_CODE:
+        // 일반 회원 로그인
+        authentication = login(request);
+        break;
+      default :
+        // 카카오 로그인
+        authentication = loginForAPI(request);
+        break;
+      }
+      
+//      if(ApplicationCodeEnum.API_COMEIT_CODE == loginTypeCode) {
+//        // 일반 회원 로그인
+//        authentication = login(request);
+//      } else if(ApplicationCodeEnum.API_KAKAO_CODE == loginTypeCode) {
+//        
+//      } else if(ApplicationCodeEnum.API_FACEBOOK_CODE == loginTypeCode) {
+//        
+//      }
+//      if(ApplicationCodeEnum.API_COMEIT_CODE.getCode().equals(loginType)) {
+//        // 일반 회원 로그인
+//        authentication = login(request);
+//      } else if(ApplicationCodeEnum.API_KAKAO_CODE.getCode().equals(loginType)) {
+//        // 오픈 API 로그인(페이스북, 카카오, 네이버)
+//        authentication = loginForAPI(request);
+//        //removeSession(request);
+//        //throw new UsernameNotFoundException("exception");
+//      }
+    } catch(ComeitBadCredentialsException ex) {
+      throw ex;
+    } catch(UsernameNotFoundException ex) {
+      throw ex;
+    } catch(Exception ex) {
+      log.error("", ex);
+      removeSession(request);
+      throw new UsernameNotFoundException("exception");
+    }
+    
+    removeSession(request);
+    return authentication;
+  }
+  
+  /**
+   * 올때그거 로그인
+   * @param request
+   */
+  private Authentication login(HttpServletRequest request) throws Exception {
+    MemberVO inMemberVo = new MemberVO();
+    inMemberVo.setEmail(crypto.getAES256Decrypt(request.getParameter("email")));
+    inMemberVo.setApiUuid(request.getParameter("apiUuid"));
+    inMemberVo.setPassword(crypto.getAES256Decrypt(request.getParameter("password")));
+    
+    // 사용자 정보 조회
+    MemberVO resultMemberVo = memberService.select(inMemberVo);
+    
+    if(resultMemberVo != null) {
+      String userSeq = resultMemberVo.getUserSeq();
+      String password = resultMemberVo.getPassword();
+      String nickName = resultMemberVo.getNickName();
+      
+      // 비밀번호 확인
+      if(StringUtils.isNotEmpty(password)) {
+        // 올때그거 회원이고 비밀번호가 입력되었으면 비밀번호 확인
+        if(!crypto.comparePassword(inMemberVo.getPassword(), password)) {
+          // 비밀번호 틀림
+          throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_PASSWORD.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_PASSWORD);
+        }
+      }
+      
+      AuthorityInfoVO authVo = new AuthorityInfoVO(userSeq, password, nickName, ApplicationCodeEnum.MEMBER_GROUP_CODE.getValue());
+      List<GrantedAuthority> roles = new ArrayList<GrantedAuthority>();
+      roles.add(new SimpleGrantedAuthority("ROLE_MEMBER"));
+      
+      UsernamePasswordAuthenticationToken result = new UsernamePasswordAuthenticationToken(authVo, null, roles);
+      
+      return result;
+    } else {
+      // 존재하지 않는 사용자
+      throw new UsernameNotFoundException(ResultCodeEnum.LOGIN_ERR_NOT_FOUND_USER.getValue());
+    }
+  }
+  
+  /**
+   * 오픈 API용 로그인(페이스북, 카카오, 네이버 로그인)
+   * @param request
+   * @return
+   * @throws Exception
+   */
+  private Authentication loginForAPI(HttpServletRequest request) throws Exception {
+    MemberVO inMemberVo = new MemberVO();
+    inMemberVo.setEmail(request.getParameter("email"));
+    inMemberVo.setApiUuid(request.getParameter("apiUuid"));
+    inMemberVo.setAccessToken(request.getParameter("apiAccessToken"));
+    inMemberVo.setLoginType(request.getParameter("login_type"));
+    
+    //log.debug("로그인 요청 회원정보 : {}", inMemberVo);
+    
+    // 사용자 정보 조회 및 가입처리
+    MemberVO resultMemberVo = memberService.loginForApi(inMemberVo);
+    
+    if(resultMemberVo != null) {
+      String userSeq = resultMemberVo.getUserSeq();
+      String password = resultMemberVo.getPassword();
+      String nickName = resultMemberVo.getNickName();
+      
+      AuthorityInfoVO authVo = new AuthorityInfoVO(userSeq, password, nickName, ApplicationCodeEnum.MEMBER_GROUP_CODE.getValue());
+      List<GrantedAuthority> roles = new ArrayList<GrantedAuthority>();
+      roles.add(new SimpleGrantedAuthority("ROLE_MEMBER"));
+      
+      UsernamePasswordAuthenticationToken result = new UsernamePasswordAuthenticationToken(authVo, null, roles);
+      
+      return result;
+    } else {
+      // 존재하지 않는 사용자
+      throw new UsernameNotFoundException(ResultCodeEnum.LOGIN_ERR_NOT_FOUND_USER.getValue());
+    }
+  }
+  
+  /**
+   * 로그아웃시 세션값 제거
+   * 
+   * @param request
+   */
+  private void removeSession(HttpServletRequest request) {
+    HttpSession session = request.getSession();
+    
+    Enumeration<String> e = session.getAttributeNames();
+    String name = null;
+
+    while(e.hasMoreElements()) {
+      name = e.nextElement();
+
+      log.info("{} : {}", name, session.getAttribute(name));
+      
+      session.removeAttribute(name);
+    }
+    
+    /*session.removeAttribute("usrId");
+    session.removeAttribute("pwd");
+    session.removeAttribute("name");
+    session.removeAttribute("usrGrpCd");
+    session.removeAttribute("orgCd");*/
+  }
+  
+  @Override
+  public boolean supports(Class<?> authentication) {
+    return (UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication));
+  }
+}

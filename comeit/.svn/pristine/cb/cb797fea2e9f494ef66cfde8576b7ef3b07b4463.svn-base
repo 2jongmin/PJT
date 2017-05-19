@@ -1,0 +1,404 @@
+package comeit.comeit.member.service;
+
+import java.net.URI;
+import java.nio.charset.Charset;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
+
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import comeit.comeit.member.vo.OpenApiUserVO;
+import comeit.framework.common.enums.ApplicationCodeEnum;
+import comeit.framework.common.enums.ResultCodeEnum;
+import comeit.framework.common.exception.BizException;
+import comeit.framework.common.exception.ComeitBadCredentialsException;
+import comeit.framework.common.utils.ApplicationProperty;
+import comeit.framework.common.vo.RestResultVO;
+
+/**
+ * 오픈API용 서비스
+ * 카카오/네이버의 회원정보 및 액세스 토큰 유효성을 검증한다.
+ * @author linuxp
+ *
+ */
+@Service
+public class SocialLoginService {
+  protected final Logger log = LoggerFactory.getLogger(SocialLoginService.class);
+
+  @Autowired
+  private ApplicationProperty applicationProperty;
+  
+  /**
+   * 소셜 로그인 액세스 토큰 유효성 검사
+   * @param accessToken
+   * @param userId
+   * @return
+   * @throws Exception
+   */
+  public OpenApiUserVO verifySocialLoginAccessToken(ApplicationCodeEnum socialTypeCode, String accessToken, String userId) throws Exception {
+    OpenApiUserVO result = null;
+    
+    try {
+      if(socialTypeCode == ApplicationCodeEnum.API_FACEBOOK_CODE) {
+        // 페이스북
+        result = verifyFacebookAccessToken(accessToken, userId);
+      } else if(socialTypeCode == ApplicationCodeEnum.API_KAKAO_CODE) {
+        // 카카오
+        result = verifyKakaoAccessToken(accessToken);
+      } else if(socialTypeCode == ApplicationCodeEnum.API_NAVER_CODE) {
+        // 네이버
+      } else if(socialTypeCode == ApplicationCodeEnum.API_GOOGLE_CODE) {
+        result = verifyGoogleAccessToken(accessToken, userId);
+      }
+    } catch(Exception ex) {
+      // 모든 예외를 서버에러로 반환
+      result = new OpenApiUserVO();
+      result.setStatusCode(HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+    
+    return result;
+  }
+  
+  /**
+   * 카카오용 액세스 토큰 유효성 검사
+   * @param accessToken
+   * @return
+   * @throws Exception
+   */
+  public OpenApiUserVO verifyKakaoAccessToken(String accessToken) throws ComeitBadCredentialsException, Exception {
+    OpenApiUserVO result = new OpenApiUserVO();
+
+    String host = applicationProperty.getProperty("api.kakao.url");
+    String path = "/v1/user/access_token_info";
+    
+    Map<String, String> headersMap = new HashMap<String, String>();
+    StringBuffer authorization = new StringBuffer("Bearer ");
+    authorization.append(accessToken);
+    headersMap.put("Authorization", authorization.toString());
+    
+    RestResultVO responseVo = sendRestFulMessage(HttpMethod.GET, host, path, headersMap, null);
+    
+    if(responseVo.getStatusCode() != HttpStatus.OK) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    String resultJsonStr = responseVo.getBody();
+
+    log.debug("Verify Kakao Access Token Result : {}", resultJsonStr);
+
+    if(StringUtils.isEmpty(resultJsonStr)) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    ObjectMapper mapper = new ObjectMapper();
+    JsonFactory factory = mapper.getFactory();
+    JsonParser jp = factory.createParser(resultJsonStr);
+    JsonNode rootNode = mapper.readTree(jp);
+
+    result.setApiUuid(rootNode.path("id").asText());
+    result.setStatusCode(HttpStatus.OK);
+
+    return result;
+  }
+  
+  /**
+   * 페이스북 액세스 토큰 
+   * @param accessToken
+   * @param userId
+   * @return
+   * @throws ComeitBadCredentialsException
+   * @throws Exception
+   */
+  private OpenApiUserVO verifyFacebookAccessToken(String accessToken, String userId) throws ComeitBadCredentialsException, Exception {
+    OpenApiUserVO result = new OpenApiUserVO();
+    
+    // 앱 엑세스 토큰 발급
+    String appAccessToken = getFacebookAppAccessToken();
+
+    if(StringUtils.isEmpty(appAccessToken)) {
+      // App Access Token 발급실패
+      throw new BizException();
+    }
+
+    String host = applicationProperty.getProperty("api.facebook.url");
+    StringBuffer path = new StringBuffer();
+    path.append("/debug_token?input_token=").append(accessToken);
+    path.append("&").append(appAccessToken);
+    
+    RestResultVO responseVo = sendRestFulMessage(HttpMethod.GET, host, path.toString(), null, null);
+    
+    if(responseVo.getStatusCode() != HttpStatus.OK) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    String resultJsonStr = responseVo.getBody();
+
+    if(StringUtils.isEmpty(resultJsonStr)) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    // 일단 ACCESS_TOKEN은 유효함
+    ObjectMapper mapper = new ObjectMapper();
+    JsonFactory factory = mapper.getFactory();
+    JsonParser jp = factory.createParser(resultJsonStr);
+    JsonNode rootNode = mapper.readTree(jp);
+
+    log.debug("Verify Facebook Access Token Result : {}", rootNode);
+
+    JsonNode dataNode = rootNode.path("data");
+    String responseUserId = dataNode.path("user_id").asText();
+    log.debug("Response user_id : {}", responseUserId);
+
+    if(StringUtils.isEmpty(responseUserId)) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    // 요청한 userId와 페이스북에서 조회된 userId가 다르면 유효하지 않다.
+    if(!userId.equals(responseUserId)) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    result.setApiUuid(responseUserId);
+    result.setStatusCode(responseVo.getStatusCode());
+    
+    return result;
+  }
+  
+  /**
+   * 구글 액세스 토큰 
+   * @param accessToken
+   * @param userId
+   * @return
+   * @throws ComeitBadCredentialsException
+   * @throws Exception
+   */
+  private OpenApiUserVO verifyGoogleAccessToken(String accessToken, String userId) throws ComeitBadCredentialsException, Exception {
+    OpenApiUserVO result = new OpenApiUserVO();
+    
+    String host = applicationProperty.getProperty("api.google.url");
+    StringBuffer path = new StringBuffer();
+    path.append("/oauth2/v3/tokeninfo?access_token=").append(accessToken);
+    
+    RestResultVO responseVo = sendRestFulMessage(HttpMethod.GET, host, path.toString(), null, null);
+    
+    if(responseVo.getStatusCode() != HttpStatus.OK) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    String resultJsonStr = responseVo.getBody();
+
+    if(StringUtils.isEmpty(resultJsonStr)) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    // 일단 ACCESS_TOKEN은 유효함
+    ObjectMapper mapper = new ObjectMapper();
+    JsonFactory factory = mapper.getFactory();
+    JsonParser jp = factory.createParser(resultJsonStr);
+    JsonNode rootNode = mapper.readTree(jp);
+
+    log.debug("Verify Facebook Access Token Result : {}", rootNode);
+
+    String responseUserId = rootNode.path("sub").asText();
+    log.debug("Response user_id : {}", responseUserId);
+
+    if(StringUtils.isEmpty(responseUserId)) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    // 요청한 userId와 페이스북에서 조회된 userId가 다르면 유효하지 않다.
+    if(!userId.equals(responseUserId)) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    result.setApiUuid(responseUserId);
+    result.setStatusCode(responseVo.getStatusCode());
+    
+    return result;
+  }
+  
+  /**
+   * 페이스북 앱 액세스 토큰 가져오기
+   * @return
+   * @throws Exception
+   */
+  private String getFacebookAppAccessToken() throws Exception {
+    String result = null;
+
+    String host = applicationProperty.getProperty("api.facebook.url");
+    StringBuffer path = new StringBuffer();
+    path.append("/oauth/access_token?");
+    path.append("&client_id=").append(applicationProperty.getProperty("api.facebook.appId"));
+    path.append("&client_secret=").append(applicationProperty.getProperty("api.facebook.secret"));
+    path.append("&grant_type=").append("client_credentials");
+
+    RestResultVO responseVo = sendRestFulMessage(HttpMethod.GET, host, path.toString(), null, null);
+
+    if(responseVo.getStatusCode() != HttpStatus.OK) {
+      // 유효하지 않은 액세스 토큰
+      throw new ComeitBadCredentialsException(ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN.getValue(), ResultCodeEnum.LOGIN_ERR_INVALID_API_ACCESS_TOKEN);
+    }
+
+    result = responseVo.getBody();
+
+    if(StringUtils.isEmpty(result)) {
+      // App AccessToken 발급실패
+      throw new BizException();
+    }
+    
+    return result;
+  }
+  
+  /**
+   * 스프링 RestTemplate을 사용하여 RESTFul 메시지 전송
+   * @param method
+   * @param host
+   * @param path
+   * @param headersMap
+   * @param paramsMap
+   * @return
+   * @throws Exception
+   */
+  private RestResultVO sendRestFulMessage(HttpMethod method, String host, String path, Map<String, String> headersMap, Map<String, String> paramsMap) throws Exception {
+    URI uri = UriComponentsBuilder.fromUriString(host + path.toString()).build().toUri();
+    log.debug("uri : {}", uri);
+    
+    
+    // 헤더 세팅
+    HttpHeaders headers = new HttpHeaders();
+    Charset utf8 = Charset.forName("UTF-8");
+    if(method == HttpMethod.GET) {
+      MediaType mediaType = new MediaType("text", "html", utf8);
+      headers.setContentType(mediaType);
+    }
+    if(headersMap != null) {
+      for(String key : headersMap.keySet()) {
+        headers.set(key, headersMap.get(key));
+      }
+    }
+    
+    // POST 파라메터 세팅
+    MultiValueMap<String, String> parameters = null;
+    if(method == HttpMethod.POST) {
+      if(paramsMap != null) {
+        parameters = new LinkedMultiValueMap<String, String>();
+        
+        for(String key : paramsMap.keySet()) {
+          parameters.add(key, paramsMap.get(key));
+        }
+      }
+    }
+    
+    RestTemplate restTemplate = new RestTemplate();
+
+    HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(parameters, headers);
+    ResponseEntity<String> responseEntity = null;
+    if(method == HttpMethod.GET) {
+      responseEntity = restTemplate.exchange(uri.toURL().toString(), method, entity, String.class);
+    } else if(method == HttpMethod.POST) {
+      responseEntity = restTemplate.postForEntity(uri.toURL().toString(), parameters, String.class);
+    }
+    
+    RestResultVO result = new RestResultVO();
+    result.setStatusCode(responseEntity.getStatusCode());
+    result.setBody(responseEntity.getBody());
+    
+    return result;
+  }
+  
+  /**
+   * 페이스북 앱 액세스 토큰 가져오기
+   * @return
+   * @throws Exception
+   */
+//  @Deprecated
+//  private String getFacebookAppAccessTokenForHTTP() throws Exception {
+//    String responseBody = "";
+//
+//    try {
+//      CloseableHttpClient httpclient = HttpClients.createDefault();
+//      Builder builder = RequestConfig.custom();
+//      builder.setConnectTimeout(4000);
+//      builder.setSocketTimeout(4000);
+//      //builder.setStaleConnectionCheckEnabled(false);
+//      RequestConfig config = builder.build();
+//
+//      try {
+//        StringBuffer url = new StringBuffer();
+//        url.append(applicationProperty.getProperty("api.facebook.url")).append("/oauth/access_token?");
+//        url.append("&client_id=").append(applicationProperty.getProperty("api.facebook.appId"));
+//        url.append("&client_secret=").append(applicationProperty.getProperty("api.facebook.secret"));
+//        url.append("&grant_type=").append("client_credentials");
+//        HttpGet httpGet = new HttpGet(url.toString());
+//        httpGet.setConfig(config);
+//
+//        log.debug("url : {}", url);
+//        log.debug("Executing request {}", httpGet.getRequestLine());
+//
+//        ResponseHandler<String> responseHandler = new ResponseHandler<String>() {
+//
+//          @Override
+//          public String handleResponse(HttpResponse response) throws ClientProtocolException, IOException {
+//
+//            int status = response.getStatusLine().getStatusCode();
+//            if(status >= 200 && status < 300) {
+//              org.apache.http.HttpEntity entity = response.getEntity();
+//              String responseStr = "";
+//              
+//              if(entity != null) {
+//                responseStr = EntityUtils.toString(entity);
+//              }
+//              
+//              log.info("responseStr : {} ", responseStr);
+//              
+//              return responseStr;
+//            } else {
+//              throw new ClientProtocolException("Unexpected response status: " + status);
+//            }
+//          }
+//        };
+//        
+//        responseBody = httpclient.execute(httpGet, responseHandler);
+//        log.info("responseBody : {} ", responseBody);
+//      } catch(Exception ex) {
+//        log.error("", ex);
+//      } finally {
+//        httpclient.close();
+//      }
+//      
+//    } catch(Exception ex) {
+//      log.error("", ex);
+//    }
+//    
+//    return responseBody;
+//  }
+}

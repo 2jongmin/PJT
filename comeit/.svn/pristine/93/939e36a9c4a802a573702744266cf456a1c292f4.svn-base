@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<sitemesh>
+  <mapping path="/*" decorator="/WEB-INF/views/admin/common/sitemesh/decorator.jsp" />
+  <!-- 로그인 화면은 사이트메시 템플릿 적용하지 않는다. -->
+  <mapping path="/admin/forwardLoginForm.do" exclude="true" />
+  <!-- 공통 얼럿 화면들도 템플릿 적용하지 않는다. -->
+  <mapping path="/common/forwardAlertView.do" exclude="true" />
+</sitemesh>

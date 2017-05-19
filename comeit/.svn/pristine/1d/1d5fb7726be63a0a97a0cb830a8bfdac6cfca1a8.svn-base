@@ -1,0 +1,80 @@
+# framework \ud328\ud0a4\uc9c0\uc758 \uc704\uce58\ub85c \uc11c\ubc84\uc758 \ub85c\uceec/\uac1c\ubc1c/\uc2a4\ud14c\uc774\uc9d5/\uc6b4\uc601 \uc5ec\ubd80\ub97c \ud310\ub2e8\ud55c\ub2e4.
+server.info.dev.jar.path = /Users/funnydev/server/www/comeit/ROOT/WEB-INF/classes/comeit/framework/common/utils/
+server.info.staging.jar.path = /home/fundriveDev/www/fundrive/ROOT/WEB-INF/classes/comeit/framework/common/utils/
+server.info.real.jar.path = /home/fundrive/www/fundrive/ROOT/WEB-INF/classes/comeit/framework/common/utils/
+
+# \uac01 \uc11c\ubc84\uc758 \ub3c4\uba54\uc778 \uc8fc\uc18c
+server.info.dev.server.host.name = dev.comeit.co
+server.info.staging.server.host.name = staging.comeit.co
+server.info.real.server.host.name = comeit.comeit.co
+
+#### var prefix\uac00 \ubd99\uc740 \uc18d\uc131\uc740 WAS \uc11c\ubc84\uac00 \uad6c\ub3d9\ub420\ub54c \uac01 \uc11c\ubc84\uc758 \uad6c\ubd84\uc5d0 \ub530\ub77c \uc11c\ubc84\uc5d0 \ud574\ub2f9\ud558\ub294 \uac12\ub4e4\uc774 \uba54\ubaa8\ub9ac\uc5d0 \ub85c\ub529\ub41c\ub2e4.
+#### var.local/dev/staging/real\uc744 \ube80 \ub4a4\uc758 \uc18d\uc131\uc774 \uc2e4\uc81c\ub85c \uc5b4\ud50c\ub9ac\ucf00\uc774\uc158\uc5d0 \uc0ac\uc6a9\ub418\ub294 key\ub2e4.
+# \uac01 \uc11c\ubc84\uc758 conf \ub514\ub809\ud1a0\ub9ac \uc704\uce58
+var.local.conf.path = /Users/linuxp/funnydev/workspace/comeit/src/main/resources-local/conf
+var.dev.conf.path = /Users/funnydev/server/www/comeit//ROOT/WEB-INF/classes/conf
+var.staging.conf.path = /home/fundriveDev/www/comeit//ROOT/WEB-INF/classes/conf
+var.real.conf.path = /home/fundrive/www/comeit//ROOT/WEB-INF/classes/conf
+
+# \uac01 \uc11c\ubc84\uc758 upload root \ub514\ub809\ud1a0\ub9ac \uc704\uce58
+var.local.upload.root.path = /Users/linuxp/comeit/upload/comeit/
+var.dev.upload.root.path = /Users/funnydev/server/upload/comeit/
+var.staging.upload.root.path = /fundrive/fundriveDev/upload/comeit/
+var.real.upload.root.path = /fundrive/fundrive/upload/comeit/
+
+# properties \ub514\ub809\ud1a0\ub9ac \uc704\uce58
+properties.path = {var.conf.path}/properties
+
+# key \ub514\ub809\ud1a0\ub9ac \uc704\uce58
+key.file = {var.conf.path}/certificates/fdn.key
+
+# \uc5c5\ub85c\ub4dc \uc784\uc2dc \ub514\ub809\ud1a0\ub9ac \uc704\uce58
+upload.temp.path = {var.upload.root.path}/temp
+
+# \uac8c\uc2dc\ud310 \uc774\ubbf8\uc9c0 \uc5c5\ub85c\ub4dc \ub514\ub809\ud1a0\ub9ac \uc704\uce58
+board.upload.image.path = {var.upload.root.path}/board_images
+
+# \ud30c\uc77c \uc5c5\ub85c\ub4dc \ub514\ub809\ud1a0\ub9ac
+upload.etc.path = {var.upload.root.path}/etc
+
+# \ud68c\uc6d0\uc0ac\uc9c4 \ub514\ub809\ud1a0\ub9ac
+car_image.path = {var.upload.root.path}/member_images
+
+# \uc62c\ub54c\uadf8\uac70 \uad00\ub9ac\uc804\uc6a9 \uc5c5\ub85c\ub4dc \ub514\ub809\ud1a0\ub9ac
+manager.upload.path = {var.upload.root.path}/manager
+
+# APNS \uc778\uc99d\uc11c \ub514\ub809\ud1a0\ub9ac
+local.apns.certificate.path = {var.conf.path}/conf/certificates/apns_cert.p12
+
+# \ud504\ub85c\ud1a0\ucf5c
+local.protocol = http
+dev.protocol = http
+staging.protocol = http
+real.protocol = https
+
+#local.server.url = localhost:8080
+local.server.url = 192.168.0.3:8080
+dev.server.url = dev.comeit.co
+staging.server.url = staging.comeit.co
+real.server.url = comeit.comeit.co
+
+# OAuth 2.0 \uc124\uc815
+oauth.resourceId = oauth2-resource
+oauth.clientId = comeit
+oauth.clientSecret = TwGodfA#8N5@Ug*zpYNm
+oauth.credentailsClientId = comeit-credentials
+
+# OPEN API \uc11c\ube44\uc2a4 \ub3c4\uba54\uc778
+api.kakao.url = https://kapi.kakao.com
+api.naver.url = https://openapi.naver.com
+api.facebook.url = https://graph.facebook.com
+
+# OPEN API \uc11c\ube44\uc2a4\ubcc4 \uacc4\uc815\uc815\ubcf4
+api.facebook.appId = 962662440519261
+api.facebook.secret = f47b616a5171610d9038a027362e9b1f
+api.facebook.scope = email
+api.facebook.redirectUri = http://localhost:8080/callback
+api.naver.id = comeit-co
+api.naver.secret = dhfEormrj321
+api.kakao.id = comeit-co@naver.com
+api.kakao.secret = dhfEormrj321

@@ -1,0 +1,156 @@
+package comeit.framework.security.crypto;
+
+import java.lang.reflect.Field;
+import java.security.MessageDigest;
+import java.security.spec.AlgorithmParameterSpec;
+
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+/**
+ * SHA-256 : 단방향(복호화 불가, 비밀번호 암호화시 사용)
+ * AES-256 : 양방향(복호화 가능, 민감한 개인정보에 사용)
+ * @author linuxp
+ *
+ */
+@Component
+public class ComeitCrypto {
+  protected final Logger log = LoggerFactory.getLogger(ComeitCrypto.class);
+  
+  /**
+   * 평문을(PLAIN TEXT) 복호화 불가능한 SHA-256으로 암호화 하여 반환
+   * @param plainText
+   * @return
+   * @throws Exception
+   */
+  public String getSHA256Encrypt(String plainText) throws Exception {
+    try {
+      MessageDigest md = MessageDigest.getInstance("SHA-256");
+      md.update(plainText.getBytes());
+      byte byteData[] = md.digest();
+
+      StringBuffer sb = new StringBuffer();
+      for(int i = 0; i < byteData.length; i++) {
+        sb.append(Integer.toString((byteData[i] & 0xff) + 0x100, 16).substring(1));
+      }
+
+      StringBuffer hexString = new StringBuffer();
+      for(int i = 0; i < byteData.length; i++) {
+        String hex=Integer.toHexString(0xff & byteData[i]);
+        if(hex.length()==1) {
+          hexString.append('0');
+        }
+        hexString.append(hex);
+      }
+
+      return hexString.toString();
+    } catch(Exception ex) {
+      throw new RuntimeException();
+    }
+  }
+  
+  /**
+   * 평문(암호화 되지 않은) 패스워드와 암호화된 패스워드를 비교하여 같으면 true 틀리면 false를 반환한다.
+   * @param plainPassword
+   * @param encryptedPassword
+   * @return
+   * @throws Exception
+   */
+  public boolean comparePassword(String plainPassword, String encryptedPassword) throws Exception {
+    String encPassword = getSHA256Encrypt(plainPassword);
+    log.debug("password : {}", encPassword);
+    return encPassword.equals(encryptedPassword);
+  }
+  
+  private String key = "29d9j29qkldjqlw@!#!@#jioq@/qwu91";
+  private String iv = "0000000000000000";
+  //private byte[] ivBytes = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+  
+  /**
+   * AES-256으로 암호화
+   * @param str
+   * @return
+   * @throws Exception
+   */
+  public String getAES256Encrypt(String str)   throws Exception {
+    byte[] textBytes = str.getBytes("UTF-8");
+    byte[] ivBytes = iv.getBytes();
+    AlgorithmParameterSpec ivSpec = new IvParameterSpec(ivBytes);
+    SecretKeySpec newKey = new SecretKeySpec(key.getBytes("UTF-8"), "AES");
+    Cipher cipher = null;
+    cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+    cipher.init(Cipher.ENCRYPT_MODE, newKey, ivSpec);
+    return Base64.encodeBase64String(cipher.doFinal(textBytes));
+  }
+  
+  /**
+   * VO의 평문들을 암호화하여 저장
+   * 리턴값 없으며 참조로 암호화 한다.
+   * @param inVoObj
+   * @throws Exception
+   */
+  public void getAES256EncryptVo(Object inVoObj) throws Exception {
+    for(Field field : inVoObj.getClass().getDeclaredFields()) {
+      field.setAccessible(true);
+      Object value = field.get(inVoObj);
+      
+      if(!field.getName().equals("serialVersionUID") && value != null && StringUtils.isNotEmpty(value.toString())) {
+        
+        try {
+          field.set(inVoObj, getAES256Encrypt(value.toString()));
+          //log.debug("{} : {} -> {}", field.getName(), value);
+        } catch(IllegalBlockSizeException ex) {
+          
+        }
+      }
+    }
+  }
+
+  /**
+   * AES-256으로 암호화된 문자를 복호화
+   * @param str
+   * @return
+   * @throws Exception
+   */
+  public String getAES256Decrypt(String str) throws Exception {
+    byte[] textBytes = Base64.decodeBase64(str);
+    //byte[] textBytes = str.getBytes("UTF-8");
+    byte[] ivBytes = iv.getBytes();
+    AlgorithmParameterSpec ivSpec = new IvParameterSpec(ivBytes);
+    SecretKeySpec newKey = new SecretKeySpec(key.getBytes("UTF-8"), "AES");
+    Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+    cipher.init(Cipher.DECRYPT_MODE, newKey, ivSpec);
+    return new String(cipher.doFinal(textBytes), "UTF-8");
+  }
+  
+  /**
+   * VO의 암호화된 값들을 복호화하여 저장
+   * 리턴값 없으며 참조로 복호화 한다.
+   * @param inVoObj
+   * @throws Exception
+   */
+  public void getAES256DecryptVo(Object inVoObj) throws Exception {
+    for(Field field : inVoObj.getClass().getDeclaredFields()) {
+      field.setAccessible(true);
+      Object value = field.get(inVoObj);
+      
+      if(!field.getName().equals("serialVersionUID") && value != null && StringUtils.isNotEmpty(value.toString())) {
+        
+        try {
+          field.set(inVoObj, getAES256Decrypt(value.toString()));
+          //log.debug("{} : {} -> {}", field.getName(), value);
+        } catch(IllegalBlockSizeException ex) {
+          
+        }
+      }
+    }
+  }
+}
